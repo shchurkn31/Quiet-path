@@ -17,7 +17,9 @@ public class PlayerController : MonoBehaviour
 
     private Vector2 move;
     private Vector2 lookDirection = Vector2.right;
-    private Vector3 currentVelocity;
+
+    public Vector2 LookDirection => lookDirection;
+    public bool IsMoving => move.sqrMagnitude > 0.01f;
 
     void Awake()
     {
@@ -40,34 +42,33 @@ public class PlayerController : MonoBehaviour
     {
         move = MoveAction.ReadValue<Vector2>().normalized;
 
-        animator.SetBool("IsMoving", move.sqrMagnitude > 0.01f);
+        animator.SetBool("IsMoving", IsMoving);
 
-        if (move.sqrMagnitude > 0.01f)
+        if (IsMoving)
             lookDirection = move;
 
         if (move.x < 0)
             spriteRenderer.flipX = true;
         else if (move.x > 0)
             spriteRenderer.flipX = false;
-
-        Vector3 targetPosition = new Vector3(
-            lookDirection.x,
-            lookDirection.y,
-            0
-        ) * lookAheadDistance;
-
-        cameraTarget.localPosition = Vector3.SmoothDamp(
-            cameraTarget.localPosition,
-            targetPosition,
-            ref currentVelocity,
-            1f / lookAheadSpeed
-        );
     }
 
     void FixedUpdate()
     {
         rb.MovePosition(
             rb.position + move * moveSpeed * Time.fixedDeltaTime
+        );
+    }
+
+    void LateUpdate()
+    {
+        Vector3 targetPosition = transform.position +
+            (Vector3)(lookDirection * lookAheadDistance);
+
+        cameraTarget.position = Vector3.Lerp(
+            cameraTarget.position,
+            targetPosition,
+            lookAheadSpeed * Time.deltaTime
         );
     }
 }
