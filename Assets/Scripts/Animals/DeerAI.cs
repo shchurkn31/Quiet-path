@@ -53,9 +53,9 @@ public class DeerAI : MonoBehaviour
     private bool facingLeft;
 
     private const string AnimIdle = "Deer_Idle";
-    private const string AnimWalk = "Deer_walk";
-    private const string AnimRun = "Deer_run";
-    private const string AnimDeath = "Deer_death";
+    private const string AnimWalk = "Deer_Walk";
+    private const string AnimRun = "Deer_Run";
+    private const string AnimDeath = "Deer_Death";
 
     [Header("Випадання предметів")]
     public GameObject meatPrefab;
