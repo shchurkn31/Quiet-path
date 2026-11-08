@@ -9,6 +9,10 @@ public class PlayerShooting : MonoBehaviour
     public float cooldown = 0.7f;
     public float shotDelay = 0.3f;
 
+    [Header("Arrows count")]
+    public int maxArrows = 4;
+    public int currentArrows = 4;
+
     [Header("Arrow")]
     public Sprite arrowSprite;
     public float arrowSpeed = 8f;
@@ -49,16 +53,26 @@ public class PlayerShooting : MonoBehaviour
         }
 
         if (ShootAction.WasPressedThisFrame() &&
-            cooldownTimer <= 0 && !isShooting)
-        {
-            StartCoroutine(Shoot());
-        }
+    cooldownTimer <= 0 &&
+    !isShooting &&
+    currentArrows > 0)
+{
+    StartCoroutine(Shoot());
+}
         if (isShooting && player.IsMoving)
+        
 {
     animator.ResetTrigger("Shoot");
     animator.SetBool("IsMoving", true);
     isShooting = false;
     StopAllCoroutines();
+}
+    if (ShootAction.WasPressedThisFrame() &&
+        cooldownTimer <= 0 &&
+        !isShooting &&
+        currentArrows > 0)
+{
+    StartCoroutine(Shoot());
 }
     }
 
@@ -128,5 +142,15 @@ else if (direction.x > 0)
 
         ArrowProjectile projectile = arrow.AddComponent<ArrowProjectile>();
         projectile.Launch(direction, arrowSpeed);
+        projectile.SetOwner(this);
+        currentArrows--;
     }
+    public void AddArrow()
+{
+    if (currentArrows < maxArrows)
+    {
+        currentArrows++;
+    }
+}
+    
 }
