@@ -1,3 +1,4 @@
+
 using UnityEngine;
 
 public class ArrowProjectile : MonoBehaviour
@@ -6,6 +7,9 @@ public class ArrowProjectile : MonoBehaviour
     public float speed = 15f;
     public float deceleration = 4f;
     public float flightTime = 2f;
+
+    [Header("Шкода")]
+    public int damage = 2;
 
     private Vector2 direction;
     private bool isLanded;
@@ -29,7 +33,8 @@ public class ArrowProjectile : MonoBehaviour
 
         pickupCollider = gameObject.AddComponent<CircleCollider2D>();
         pickupCollider.isTrigger = true;
-        pickupCollider.enabled = false;
+
+        DeerAI.NotifyShot(transform.position);
     }
 
     void Update()
@@ -63,14 +68,23 @@ public class ArrowProjectile : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (!isLanded)
-            return;
-
-        PlayerShooting player = other.GetComponent<PlayerShooting>();
-
-        if (player == owner && owner != null)
+        if (isLanded)
         {
-            owner.AddArrow();
+            PlayerShooting player = other.GetComponentInParent<PlayerShooting>();
+
+            if (player == owner && owner != null && owner.AddArrow())
+            {
+                Destroy(gameObject);
+            }
+
+            return;
+        }
+
+        DeerAI deer = other.GetComponentInParent<DeerAI>();
+
+        if (deer != null)
+        {
+            deer.TakeDamage(damage);
             Destroy(gameObject);
         }
     }

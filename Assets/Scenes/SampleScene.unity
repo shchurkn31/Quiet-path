@@ -228,13 +228,13 @@ GameObject:
   - component: {fileID: 235982059}
   - component: {fileID: 235982058}
   - component: {fileID: 235982063}
-  m_Layer: 7
+  m_Layer: 12
   m_Name: Deer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!95 &235982058
 Animator:
   serializedVersion: 7
@@ -248,7 +248,7 @@ Animator:
   m_Controller: {fileID: 9100000, guid: 43bbd89bf764611488e2f90667a88b3e, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
-  m_ApplyRootMotion: 0
+  m_ApplyRootMotion: 1
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_AnimatePhysics: 0
@@ -399,7 +399,7 @@ Transform:
   m_GameObject: {fileID: 235982057}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 5.0907345, y: 1.519474, z: 0}
+  m_LocalPosition: {x: 12, y: 15.5, z: 0}
   m_LocalScale: {x: 8, y: 8, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -414,9 +414,29 @@ MonoBehaviour:
   m_GameObject: {fileID: 235982057}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8af2aa583b029d64293609ebad179c12, type: 3}
+  m_Script: {fileID: 11500000, guid: bf620303eb6fd0b4b868501615ad9b6f, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Health
+  m_EditorClassIdentifier: Assembly-CSharp::DeerAI
+  maxHealth: 2
+  player: {fileID: 559309389}
+  currentState: 0
+  alertDistance: 7
+  fleeDistance: 3
+  hearingRadius: 8
+  fleeDuration: 4
+  calmSpeed: 1
+  alertSpeed: 1.8
+  fleeSpeed: 4
+  calmRadius: 2
+  alertRadius: 5
+  decisionInterval: 2
+  deathDuration: 1.2
+  meatPrefab: {fileID: 2904237637554668720, guid: 6ca646f27b2ee9248abb2a3e45ef215f,
+    type: 3}
+  hidePrefab: {fileID: 5036994598398552163, guid: aaf05f2b40d9d85419de6e0ca0175466,
+    type: 3}
+  dropSpread: 0.4
+  lootDropDelay: 1.2
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -602,7 +622,8 @@ GameObject:
   - component: {fileID: 559309392}
   - component: {fileID: 559309396}
   - component: {fileID: 559309397}
-  m_Layer: 6
+  - component: {fileID: 559309398}
+  m_Layer: 11
   m_Name: Player
   m_TagString: Player
   m_Icon: {fileID: 0}
@@ -886,6 +907,20 @@ MonoBehaviour:
   arrowSize: 0.3
   spawnDistance: 0.5
   spawnOffsetY: 0.8
+--- !u!114 &559309398
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 559309384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b53cf0dbbcb1766479e0852796eb58ea, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
+  meatCount: 0
+  hideCount: 0
 --- !u!1 &619394800
 GameObject:
   m_ObjectHideFlags: 0
@@ -979,7 +1014,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 707964290}
-  m_Layer: 0
+  m_Layer: 11
   m_Name: CameraTarget
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -34078,8 +34113,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -326.36343, y: 199.7497}
-  m_SizeDelta: {x: 96.2731, y: 21.5006}
+  m_AnchoredPosition: {x: -632, y: 376}
+  m_SizeDelta: {x: 120.5253, y: 50.6032}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1858079497
 MonoBehaviour:
@@ -34142,8 +34177,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10
-  m_fontSizeBase: 10
+  m_fontSize: 18
+  m_fontSizeBase: 18
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18

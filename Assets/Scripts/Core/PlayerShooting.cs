@@ -145,12 +145,12 @@ else if (direction.x > 0)
         projectile.SetOwner(this);
         currentArrows--;
     }
-    public void AddArrow()
+    public bool AddArrow()
 {
-    if (currentArrows < maxArrows)
-    {
-        currentArrows++;
-    }
-}
-    
+    if (currentArrows >= maxArrows)
+        return false;
+
+    currentArrows++;
+    return true;
+} 
 }
