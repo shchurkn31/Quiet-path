@@ -1,24 +1,29 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Спавнер оленів. Кладемо на порожній об'єкт Spawner у сцені.
-// На старті розставляє оленів по карті, потім раз на respawnInterval
-// досіває до targetCount. Нових оленів ставить поза кадром камери.
-// Потрібні: MapBounds у сцені і префаб оленя з DeerAI.
+// Спавнер тварин (олені й кабани). Кладемо на порожній об'єкт Spawner у сцені.
+// На старті розставляє тварин по карті, потім раз на respawnInterval
+// досіває до потрібної кількості. Нових тварин ставить поза кадром камери.
+// Потрібні: MapBounds у сцені і префаби з DeerAI та/або BoarAI.
+// Префаб, якого не вказано, просто не спавниться.
 public class AnimalSpawner : MonoBehaviour
 {
-    [Header("Що спавнити")]
+    [Header("Олені")]
     [SerializeField] private DeerAI deerPrefab;
-    [Tooltip("Гравець. Його передаємо кожному оленеві, бо префаб не може посилатися на об'єкт зі сцени.")]
-    [SerializeField] private Transform player;
-
-    [Header("Кількість")]
     [SerializeField] private int targetCount = 7;
-    [Tooltip("Через скільки секунд досіюється один олень, якщо їх менше за targetCount.")]
+
+    [Header("Кабани")]
+    [SerializeField] private BoarAI boarPrefab;
+    [SerializeField] private int boarTargetCount = 3;
+
+    [Header("Загальне")]
+    [Tooltip("Гравець. Його передаємо кожній тварині, бо префаб не може посилатися на об'єкт зі сцени.")]
+    [SerializeField] private Transform player;
+    [Tooltip("Через скільки секунд досіюється одна тварина (кожного виду окремо), якщо їх менше за потрібну кількість.")]
     [SerializeField] private float respawnInterval = 60f;
 
     [Header("Де можна з'являтись")]
-    [Tooltip("Відступ від краю карти. Має бути трохи більшим за Alert Radius оленя (5), щоб він не ходив у стіну.")]
+    [Tooltip("Відступ від краю карти. Має бути трохи більшим за Alert Radius тварини (5 у оленя), щоб вона не ходила в стіну.")]
     [SerializeField] private float edgeMargin = 6f;
     [SerializeField] private float minDistanceFromPlayer = 10f;
     [Tooltip("Табір. Необов'язково: поруч із табором тварин не ставимо.")]
@@ -36,15 +41,17 @@ public class AnimalSpawner : MonoBehaviour
     [SerializeField] private float offscreenPadding = 0.15f;
 
     private readonly List<DeerAI> deer = new List<DeerAI>();
-    private float respawnTimer;
+    private readonly List<BoarAI> boars = new List<BoarAI>();
+    private float deerTimer;
+    private float boarTimer;
 
     private void Start()
     {
         if (viewCamera == null) viewCamera = Camera.main;
 
-        if (deerPrefab == null)
+        if (deerPrefab == null && boarPrefab == null)
         {
-            Debug.LogError("AnimalSpawner: не вказано префаб оленя.", this);
+            Debug.LogError("AnimalSpawner: не вказано жодного префаба тварини.", this);
             enabled = false;
             return;
         }
@@ -57,42 +64,77 @@ public class AnimalSpawner : MonoBehaviour
         }
 
         // Початкова розстановка: камера вже на місці, тому поза кадром не вимагаємо.
-        for (int i = 0; i < targetCount; i++)
+        if (deerPrefab != null)
         {
-            SpawnOne(false);
+            for (int i = 0; i < targetCount; i++) SpawnDeer(false);
         }
 
-        respawnTimer = respawnInterval;
+        if (boarPrefab != null)
+        {
+            for (int i = 0; i < boarTargetCount; i++) SpawnBoar(false);
+        }
+
+        deerTimer = respawnInterval;
+        boarTimer = respawnInterval;
     }
 
     private void Update()
     {
-        if (AliveCount() >= targetCount)
+        if (deerPrefab != null)
         {
-            respawnTimer = respawnInterval;
+            TickRespawn(ref deerTimer, AliveDeerCount() < targetCount, () => SpawnDeer(true));
+        }
+
+        if (boarPrefab != null)
+        {
+            TickRespawn(ref boarTimer, AliveBoarCount() < boarTargetCount, () => SpawnBoar(true));
+        }
+    }
+
+    private void TickRespawn(ref float timer, bool needMore, System.Func<bool> spawn)
+    {
+        if (!needMore)
+        {
+            timer = respawnInterval;
             return;
         }
 
-        respawnTimer -= Time.deltaTime;
-        if (respawnTimer > 0f) return;
+        timer -= Time.deltaTime;
+        if (timer > 0f) return;
 
         // Якщо вдалого місця не знайшли, спробуємо ще раз через секунду.
-        respawnTimer = SpawnOne(true) ? respawnInterval : 1f;
+        timer = spawn() ? respawnInterval : 1f;
     }
 
-    private int AliveCount()
+    private int AliveDeerCount()
     {
         deer.RemoveAll(d => d == null || d.currentState == DeerAI.DeerState.Dead);
         return deer.Count;
     }
 
-    private bool SpawnOne(bool outsideCamera)
+    private int AliveBoarCount()
+    {
+        boars.RemoveAll(b => b == null || b.currentState == BoarAI.BoarState.Dead);
+        return boars.Count;
+    }
+
+    private bool SpawnDeer(bool outsideCamera)
     {
         if (!TryGetSpawnPoint(outsideCamera, out Vector2 point)) return false;
 
         DeerAI newDeer = Instantiate(deerPrefab, point, Quaternion.identity, transform);
         newDeer.player = player;
         deer.Add(newDeer);
+        return true;
+    }
+
+    private bool SpawnBoar(bool outsideCamera)
+    {
+        if (!TryGetSpawnPoint(outsideCamera, out Vector2 point)) return false;
+
+        BoarAI newBoar = Instantiate(boarPrefab, point, Quaternion.identity, transform);
+        newBoar.player = player;
+        boars.Add(newBoar);
         return true;
     }
 
