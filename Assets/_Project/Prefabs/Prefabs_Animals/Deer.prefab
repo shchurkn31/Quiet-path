@@ -213,6 +213,12 @@ MonoBehaviour:
   calmSpeed: 2
   alertSpeed: 3
   fleeSpeed: 7
+  obstacleLayer:
+    serializedVersion: 2
+    m_Bits: 8192
+  obstacleCheckDistance: 2
+  obstacleCheckRadius: 2
+  avoidanceStrength: 2
   calmRadius: 4
   alertRadius: 5
   decisionInterval: 2

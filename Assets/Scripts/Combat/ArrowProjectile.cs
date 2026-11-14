@@ -1,6 +1,7 @@
 
 using UnityEngine;
 
+[RequireComponent(typeof(Rigidbody2D))]
 public class ArrowProjectile : MonoBehaviour
 {
     [Header("Налаштування польоту")]
@@ -15,8 +16,18 @@ public class ArrowProjectile : MonoBehaviour
     private bool isLanded;
 
     private CircleCollider2D pickupCollider;
+    private Rigidbody2D rb;
     private PlayerShooting owner;
     private float flightTimer;
+
+    private void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.gravityScale = 0f;
+        rb.freezeRotation = true;
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+    }
 
     public void SetOwner(PlayerShooting player)
     {
@@ -24,33 +35,35 @@ public class ArrowProjectile : MonoBehaviour
     }
 
     public void Launch(Vector2 shootDirection, float arrowSpeed)
-    {
-        direction = shootDirection.normalized;
-        speed = arrowSpeed;
+{
+    direction = shootDirection.normalized;
+    speed = arrowSpeed;
 
-        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-        transform.rotation = Quaternion.Euler(0, 0, angle);
+    float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+    transform.rotation = Quaternion.Euler(0, 0, angle);
 
-        pickupCollider = gameObject.AddComponent<CircleCollider2D>();
-        pickupCollider.isTrigger = true;
+    pickupCollider = gameObject.AddComponent<CircleCollider2D>();
+    pickupCollider.isTrigger = true;
+    pickupCollider.radius = 0.5f;
+    pickupCollider.enabled = true;
 
-        DeerAI.NotifyShot(transform.position);
-    }
+    DeerAI.NotifyShot(transform.position);
+    BoarAI.NotifyShot(transform.position);
+}
 
-    void Update()
+    private void FixedUpdate()
     {
         if (isLanded)
             return;
 
-        flightTimer += Time.deltaTime;
+        flightTimer += Time.fixedDeltaTime;
 
-        transform.position +=
-            (Vector3)(direction * speed * Time.deltaTime);
+        rb.MovePosition(rb.position + direction * speed * Time.fixedDeltaTime);
 
         speed = Mathf.MoveTowards(
             speed,
-            0,
-            deceleration * Time.deltaTime
+            0f,
+            deceleration * Time.fixedDeltaTime
         );
 
         if (speed <= 0.1f || flightTimer >= flightTime)
@@ -59,33 +72,44 @@ public class ArrowProjectile : MonoBehaviour
         }
     }
 
-    void Land()
+    private void Land()
     {
         isLanded = true;
-        speed = 0;
+        speed = 0f;
         pickupCollider.enabled = true;
     }
 
-    void OnTriggerEnter2D(Collider2D other)
+    private void OnTriggerEnter2D(Collider2D other)
+{
+    if (isLanded)
     {
-        if (isLanded)
+        PlayerShooting player = other.GetComponentInParent<PlayerShooting>();
+
+        if (player == owner && owner != null && owner.AddArrow())
         {
-            PlayerShooting player = other.GetComponentInParent<PlayerShooting>();
-
-            if (player == owner && owner != null && owner.AddArrow())
-            {
-                Destroy(gameObject);
-            }
-
-            return;
-        }
-
-        DeerAI deer = other.GetComponentInParent<DeerAI>();
-
-        if (deer != null)
-        {
-            deer.TakeDamage(damage);
             Destroy(gameObject);
         }
+
+        if (other.GetComponentInParent<PlayerShooting>() == owner)
+    return;
     }
+
+    BoarAI boar = other.GetComponentInParent<BoarAI>();
+
+    if (boar != null)
+    {
+        boar.TakeDamage(damage);
+        Destroy(gameObject);
+        return;
+    }
+
+    DeerAI deer = other.GetComponentInParent<DeerAI>();
+
+    if (deer != null)
+    {
+        deer.TakeDamage(damage);
+        Destroy(gameObject);
+    }
+}
+
 }

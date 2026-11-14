@@ -27,6 +27,15 @@ public class PlayerShooting : MonoBehaviour
     private float cooldownTimer;
     private bool isShooting;
     private SpriteRenderer spriteRenderer;
+
+    private void Start()
+{
+    if (GameManager.Instance != null)
+    {
+        maxArrows += GameManager.Instance.purchasedArrows;
+        currentArrows = maxArrows;
+    }
+}
     void Awake()
     {
         animator = GetComponent<Animator>();

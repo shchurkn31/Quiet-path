@@ -2,6 +2,8 @@
 using System.Collections;
 using UnityEngine;
 
+[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Collider2D))]
 public class BoarAI : MonoBehaviour, IDamageable
 {
     public enum BoarState
@@ -19,8 +21,8 @@ public class BoarAI : MonoBehaviour, IDamageable
     [Header("ШІ")]
     public Transform player;
     public BoarState currentState = BoarState.Calm;
-
     public float alertDistance = 4f;
+    public float attackDetectionDistance = 3f;
     public float shotAggroRadius = 3f;
     public float shotAlertRadius = 10f;
     public float loseTargetDistance = 12f;
@@ -29,20 +31,28 @@ public class BoarAI : MonoBehaviour, IDamageable
     [Header("Швидкість")]
     public float calmSpeed = 0.8f;
     public float alertSpeed = 1.4f;
-    public float attackSpeed = 4.5f;
+    public float attackSpeed = 3f;
+
+    [Header("Обхід перешкод")]
+    public LayerMask obstacleLayer;
+    public float obstacleCheckDistance = 0.8f;
+    public float obstacleCheckRadius = 0.35f;
+    public float avoidanceStrength = 2f;
 
     [Header("Територія")]
     public float calmRadius = 2f;
     public float alertRadius = 3f;
     public float decisionInterval = 2f;
 
-    [Header("Удар")]
-    public float attackRange = 1.2f;
+    [Header("Атака")]
+    public float attackRange = 1.8f;
     public float attackDamage = 1f;
     public float attackCooldown = 1.2f;
+    public float attackWindup = 0f;
     public float attackAnimDuration = 0.6f;
     public float attackHitDelay = 0.25f;
-    public float attackWindup = 0.5f;
+
+    [Header("Отримання шкоди")]
     public float hurtDuration = 0.5f;
 
     [Header("Смерть і здобич")]
@@ -61,7 +71,7 @@ public class BoarAI : MonoBehaviour, IDamageable
     private Rigidbody2D rb;
     private Animator animator;
     private SpriteRenderer spriteRenderer;
-    private Collider2D boarCollider;
+    private Collider2D[] boarColliders;
 
     private Vector2 homePosition;
     private Vector2 movementDirection;
@@ -69,11 +79,12 @@ public class BoarAI : MonoBehaviour, IDamageable
     private float decisionTimer;
     private float lostTimer;
     private float attackCooldownTimer;
-    private float attackLockTimer;
     private float windupTimer;
+    private float attackTimer;
     private float hurtTimer;
 
     private bool attackDamageDealt;
+    private string currentAnimation;
 
     private const string AnimIdle = "Boar_Idle";
     private const string AnimWalk = "Boar_Walk";
@@ -82,14 +93,12 @@ public class BoarAI : MonoBehaviour, IDamageable
     private const string AnimHurt = "Boar_Hurt";
     private const string AnimDeath = "Boar_Death";
 
-    private string currentAnimation;
-
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
-        boarCollider = GetComponent<Collider2D>();
+        boarColliders = GetComponents<Collider2D>();
 
         currentHealth = maxHealth;
         homePosition = transform.position;
@@ -97,28 +106,15 @@ public class BoarAI : MonoBehaviour, IDamageable
 
     private void Start()
     {
-        ValidateAnimator();
-    }
-
-    private void ValidateAnimator()
-    {
-        string[] names =
+        if (player == null)
         {
-            AnimIdle,
-            AnimWalk,
-            AnimRun,
-            AnimAttack,
-            AnimHurt,
-            AnimDeath
-        };
+            GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
 
-        foreach (string stateName in names)
-        {
-            if (!animator.HasState(0, Animator.StringToHash(stateName)))
-            {
-                Debug.LogError("BoarAI: не знайдено стан Animator: " + stateName, this);
-            }
+            if (playerObject != null)
+                player = playerObject.transform;
         }
+
+        PlayAnimation(AnimIdle);
     }
 
     private void Update()
@@ -133,17 +129,28 @@ public class BoarAI : MonoBehaviour, IDamageable
             return;
         }
 
-        float distanceToPlayer = DistanceToPlayer();
+        float distance = DistanceToPlayer();
 
-        if (currentState == BoarState.Calm && distanceToPlayer <= alertDistance)
+        if (currentState != BoarState.Attack)
         {
-            currentState = BoarState.Alert;
-            decisionTimer = 0f;
-        }
-        else if (currentState == BoarState.Alert && distanceToPlayer > alertDistance * 1.5f)
-        {
-            currentState = BoarState.Calm;
-            decisionTimer = 0f;
+            if (distance <= attackDetectionDistance)
+            {
+                StartAttack();
+            }
+            else if (distance <= alertDistance)
+            {
+                if (currentState == BoarState.Calm)
+                {
+                    currentState = BoarState.Alert;
+                    decisionTimer = 0f;
+                }
+            }
+            else if (currentState == BoarState.Alert &&
+                     distance > alertDistance * 1.5f)
+            {
+                currentState = BoarState.Calm;
+                decisionTimer = 0f;
+            }
         }
 
         switch (currentState)
@@ -157,14 +164,14 @@ public class BoarAI : MonoBehaviour, IDamageable
                 break;
 
             case BoarState.Attack:
-                UpdateAttack(distanceToPlayer);
+                UpdateAttack(distance);
                 break;
         }
     }
 
     private void FixedUpdate()
     {
-        if (currentState == BoarState.Dead)
+        if (currentState == BoarState.Dead || rb == null)
             return;
 
         float speed = calmSpeed;
@@ -174,14 +181,129 @@ public class BoarAI : MonoBehaviour, IDamageable
         else if (currentState == BoarState.Attack)
             speed = attackSpeed;
 
-        rb.MovePosition(rb.position + movementDirection * speed * Time.fixedDeltaTime);
+        if (movementDirection.sqrMagnitude < 0.01f)
+            return;
+
+        Vector2 moveDirection =
+            GetAvoidanceDirection(movementDirection.normalized);
+
+        if (moveDirection.sqrMagnitude > 0.01f)
+        {
+            rb.MovePosition(
+                rb.position + moveDirection * speed * Time.fixedDeltaTime
+            );
+
+            FaceDirection(moveDirection);
+        }
+    }
+
+    private Vector2 GetAvoidanceDirection(Vector2 direction)
+    {
+        if (obstacleLayer.value == 0)
+            return direction;
+
+        RaycastHit2D hit = Physics2D.CircleCast(
+            rb.position,
+            obstacleCheckRadius,
+            direction,
+            obstacleCheckDistance,
+            obstacleLayer
+        );
+
+        if (hit.collider == null)
+            return direction;
+
+        Vector2 leftDirection =
+            Quaternion.Euler(0f, 0f, 45f) * direction;
+
+        Vector2 rightDirection =
+            Quaternion.Euler(0f, 0f, -45f) * direction;
+
+        RaycastHit2D leftHit = Physics2D.CircleCast(
+            rb.position,
+            obstacleCheckRadius,
+            leftDirection,
+            obstacleCheckDistance,
+            obstacleLayer
+        );
+
+        RaycastHit2D rightHit = Physics2D.CircleCast(
+            rb.position,
+            obstacleCheckRadius,
+            rightDirection,
+            obstacleCheckDistance,
+            obstacleLayer
+        );
+
+        if (leftHit.collider == null && rightHit.collider != null)
+        {
+            return (direction + leftDirection * avoidanceStrength).normalized;
+        }
+
+        if (rightHit.collider == null && leftHit.collider != null)
+        {
+            return (direction + rightDirection * avoidanceStrength).normalized;
+        }
+
+        if (leftHit.collider == null && rightHit.collider == null)
+        {
+            if (player != null)
+            {
+                float leftDistance = Vector2.Distance(
+                    rb.position + leftDirection,
+                    player.position
+                );
+
+                float rightDistance = Vector2.Distance(
+                    rb.position + rightDirection,
+                    player.position
+                );
+
+                Vector2 chosenDirection =
+                    leftDistance < rightDistance
+                    ? leftDirection
+                    : rightDirection;
+
+                return (direction + chosenDirection * avoidanceStrength).normalized;
+            }
+
+            return (direction + leftDirection * avoidanceStrength).normalized;
+        }
+
+        Vector2 leftSide = new Vector2(-direction.y, direction.x);
+        Vector2 rightSide = new Vector2(direction.y, -direction.x);
+
+        RaycastHit2D leftSideHit = Physics2D.CircleCast(
+            rb.position,
+            obstacleCheckRadius,
+            leftSide,
+            obstacleCheckDistance,
+            obstacleLayer
+        );
+
+        RaycastHit2D rightSideHit = Physics2D.CircleCast(
+            rb.position,
+            obstacleCheckRadius,
+            rightSide,
+            obstacleCheckDistance,
+            obstacleLayer
+        );
+
+        if (leftSideHit.collider == null)
+            return leftSide;
+
+        if (rightSideHit.collider == null)
+            return rightSide;
+
+        return Vector2.zero;
     }
 
     private float DistanceToPlayer()
     {
-        return player != null
-            ? Vector2.Distance(transform.position, player.position)
-            : Mathf.Infinity;
+        if (player == null)
+            return Mathf.Infinity;
+
+        return Vector2.Distance(transform.position, player.position);
     }
 
     private void UpdateRoaming(float radius)
@@ -198,56 +320,31 @@ public class BoarAI : MonoBehaviour, IDamageable
             }
             else
             {
-                Vector2 target = homePosition + Random.insideUnitCircle * radius;
-                movementDirection = (target - rb.position).normalized;
+                Vector2 target =
+                    homePosition + Random.insideUnitCircle * radius;
+
+                movementDirection =
+                    (target - rb.position).normalized;
             }
         }
 
-        string action = movementDirection.sqrMagnitude < 0.01f
-            ? AnimIdle
-            : AnimWalk;
-
-        PlayMovementAnimation(movementDirection, action);
+        if (movementDirection.sqrMagnitude < 0.01f)
+        {
+            PlayAnimation(AnimIdle);
+        }
+        else
+        {
+            PlayMovementAnimation(movementDirection, AnimWalk);
+        }
     }
 
-    private void UpdateAttack(float distanceToPlayer)
+    private void UpdateAttack(float distance)
     {
-        attackCooldownTimer -= Time.deltaTime;
-
-        if (windupTimer > 0f)
-        {
-            windupTimer -= Time.deltaTime;
-            movementDirection = Vector2.zero;
-
-            if (player != null)
-                FaceDirection((Vector2)player.position - rb.position);
-
-            if (windupTimer <= 0f)
-                StartStrike();
-
-            return;
-        }
-
-        if (attackLockTimer > 0f)
-        {
-            attackLockTimer -= Time.deltaTime;
-            movementDirection = Vector2.zero;
-
-            if (!attackDamageDealt &&
-                attackLockTimer <= attackAnimDuration - attackHitDelay)
-            {
-                attackDamageDealt = true;
-                DealDamageToPlayer();
-            }
-
-            return;
-        }
-
-        if (player == null || distanceToPlayer > loseTargetDistance)
+        if (player == null || distance > loseTargetDistance)
         {
             lostTimer += Time.deltaTime;
 
-            if (player == null || lostTimer >= loseTargetTime)
+            if (lostTimer >= loseTargetTime)
             {
                 EndAttack();
                 return;
@@ -259,22 +356,57 @@ public class BoarAI : MonoBehaviour, IDamageable
         }
 
         if (player == null)
+        {
+            movementDirection = Vector2.zero;
             return;
+        }
+
+        if (attackCooldownTimer > 0f)
+            attackCooldownTimer -= Time.deltaTime;
+
+        if (windupTimer > 0f)
+        {
+            windupTimer -= Time.deltaTime;
+            movementDirection = Vector2.zero;
+
+            FaceDirection((Vector2)player.position - rb.position);
+
+            if (windupTimer <= 0f)
+                StartStrike();
+
+            return;
+        }
+
+        if (attackTimer > 0f)
+        {
+            attackTimer -= Time.deltaTime;
+            movementDirection = Vector2.zero;
+
+            float hitMoment = attackAnimDuration - attackHitDelay;
+
+            if (!attackDamageDealt && attackTimer <= hitMoment)
+            {
+                attackDamageDealt = true;
+                DealDamageToPlayer();
+            }
+
+            if (attackTimer <= 0f)
+                PlayAnimation(AnimIdle);
+
+            return;
+        }
 
         Vector2 toPlayer = (Vector2)player.position - rb.position;
 
-        if (distanceToPlayer <= attackRange)
+        if (distance <= attackRange)
         {
+            movementDirection = Vector2.zero;
+            FaceDirection(toPlayer);
+
             if (attackCooldownTimer <= 0f)
-            {
                 StartWindup(toPlayer);
-            }
             else
-            {
-                movementDirection = Vector2.zero;
-                FaceDirection(toPlayer);
                 PlayAnimation(AnimIdle);
-            }
 
             return;
         }
@@ -283,13 +415,14 @@ public class BoarAI : MonoBehaviour, IDamageable
         PlayMovementAnimation(movementDirection, AnimRun);
     }
 
-    private void StartWindup(Vector2 toPlayer)
+    private void StartWindup(Vector2 direction)
     {
         movementDirection = Vector2.zero;
-        FaceDirection(toPlayer);
 
+        FaceDirection(direction);
+
+        windupTimer = Mathf.Max(0f, attackWindup);
         attackCooldownTimer = attackCooldown;
-        windupTimer = attackWindup;
 
         PlayAnimation(AnimIdle);
 
@@ -301,24 +434,12 @@ public class BoarAI : MonoBehaviour, IDamageable
     {
         movementDirection = Vector2.zero;
 
-        attackLockTimer = attackAnimDuration;
+        attackTimer = Mathf.Max(0.01f, attackAnimDuration);
+        attackHitDelay = Mathf.Clamp(attackHitDelay, 0f, attackTimer);
+
         attackDamageDealt = false;
 
-        currentAnimation = AnimAttack;
-        animator.Play(AnimAttack, 0, 0f);
-    }
-
-    private void StartHurt()
-    {
-        hurtTimer = hurtDuration;
-        windupTimer = 0f;
-        attackLockTimer = 0f;
-        movementDirection = Vector2.zero;
-
-        attackCooldownTimer = Mathf.Max(attackCooldownTimer, 0.3f);
-
-        currentAnimation = AnimHurt;
-        animator.Play(AnimHurt, 0, 0f);
+        PlayAnimation(AnimAttack);
     }
 
     private void DealDamageToPlayer()
@@ -326,36 +447,51 @@ public class BoarAI : MonoBehaviour, IDamageable
         if (player == null)
             return;
 
-        if (Vector2.Distance(transform.position, player.position) > attackRange * 1.5f)
+        float distance = DistanceToPlayer();
+
+        if (distance > attackRange * 1.5f)
             return;
 
         IDamageable target = player.GetComponentInParent<IDamageable>();
 
         if (target == null)
+        {
+            Debug.LogWarning("На гравці не знайдено IDamageable!", this);
             return;
+        }
 
-        Vector2 direction = ((Vector2)player.position - rb.position).normalized;
+        Vector2 direction =
+            ((Vector2)player.position - rb.position).normalized;
 
         target.TakeDamage(attackDamage, direction);
     }
 
     private void StartAttack()
     {
-        if (currentState == BoarState.Attack || currentState == BoarState.Dead)
+        if (currentState == BoarState.Attack ||
+            currentState == BoarState.Dead)
             return;
 
         currentState = BoarState.Attack;
+
         lostTimer = 0f;
-        attackLockTimer = 0f;
-        attackCooldownTimer = 0.3f;
+        windupTimer = 0f;
+        attackTimer = 0f;
+        attackCooldownTimer = 0f;
+
+        movementDirection = Vector2.zero;
     }
 
     private void EndAttack()
     {
         currentState = BoarState.Alert;
+
         movementDirection = Vector2.zero;
+
         decisionTimer = 0f;
         lostTimer = 0f;
+        windupTimer = 0f;
+        attackTimer = 0f;
     }
 
     public void ReactToShot(Vector2 shotPosition)
@@ -369,7 +505,8 @@ public class BoarAI : MonoBehaviour, IDamageable
         {
             StartAttack();
         }
-        else if (distance <= shotAlertRadius && currentState == BoarState.Calm)
+        else if (distance <= shotAlertRadius &&
+                 currentState == BoarState.Calm)
         {
             currentState = BoarState.Alert;
             decisionTimer = 0f;
@@ -378,12 +515,10 @@ public class BoarAI : MonoBehaviour, IDamageable
 
     public static void NotifyShot(Vector2 shotPosition)
     {
-        BoarAI[] boars = FindObjectsByType<BoarAI>(FindObjectsSortMode.None);
+        BoarAI[] boars = FindObjectsOfType<BoarAI>();
 
         foreach (BoarAI boar in boars)
-        {
             boar.ReactToShot(shotPosition);
-        }
     }
 
     public void TakeDamage(float amount, Vector2 hitDirection)
@@ -393,10 +528,12 @@ public class BoarAI : MonoBehaviour, IDamageable
 
     public void TakeDamage(int damage)
     {
-        if (currentState == BoarState.Dead)
+        if (currentState == BoarState.Dead || damage <= 0)
             return;
 
         currentHealth -= damage;
+
+        Debug.Log("Кабан отримав шкоду. Здоров'я: " + currentHealth, this);
 
         if (currentHealth <= 0)
         {
@@ -409,6 +546,17 @@ public class BoarAI : MonoBehaviour, IDamageable
         }
     }
 
+    private void StartHurt()
+    {
+        hurtTimer = hurtDuration;
+
+        windupTimer = 0f;
+        attackTimer = 0f;
+        movementDirection = Vector2.zero;
+
+        PlayAnimation(AnimHurt);
+    }
+
     private void Die()
     {
         currentState = BoarState.Dead;
@@ -417,34 +565,30 @@ public class BoarAI : MonoBehaviour, IDamageable
         rb.linearVelocity = Vector2.zero;
         rb.simulated = false;
 
-        boarCollider.enabled = false;
+        foreach (Collider2D col in boarColliders)
+            col.enabled = false;
 
-        currentAnimation = AnimDeath;
-        animator.Play(AnimDeath, 0, 0f);
-        animator.Update(0f);
+        if (animator != null)
+        {
+            currentAnimation = AnimDeath;
+            animator.Play(AnimDeath, 0, 0f);
+        }
 
         StartCoroutine(DeathRoutine());
     }
 
     private IEnumerator DeathRoutine()
     {
-        yield return null;
+        float dropDelay = Mathf.Clamp(lootDropDelay, 0f, deathDuration);
 
-        float length = animator.GetCurrentAnimatorStateInfo(0).length;
-
-        if (length <= 0.01f)
-            length = deathDuration;
-
-        float lootAt = Mathf.Min(lootDropDelay, length);
-
-        yield return new WaitForSeconds(lootAt);
+        yield return new WaitForSeconds(dropDelay);
 
         SpawnLoot();
 
-        float rest = length - lootAt;
+        float remainingTime = deathDuration - dropDelay;
 
-        if (rest > 0f)
-            yield return new WaitForSeconds(rest);
+        if (remainingTime > 0f)
+            yield return new WaitForSeconds(remainingTime);
 
         Destroy(gameObject);
     }
@@ -483,10 +627,10 @@ public class BoarAI : MonoBehaviour, IDamageable
         }
     }
 
-    private void PlayMovementAnimation(Vector2 direction, string action)
+    private void PlayMovementAnimation(Vector2 direction, string animationName)
     {
         FaceDirection(direction);
-        PlayAnimation(action);
+        PlayAnimation(animationName);
     }
 
     private void FaceDirection(Vector2 direction)
@@ -495,12 +639,13 @@ public class BoarAI : MonoBehaviour, IDamageable
             return;
 
         bool left = direction.x < 0f;
+
         spriteRenderer.flipX = spriteFacesRight ? left : !left;
     }
 
     private void PlayAnimation(string animationName)
     {
-        if (currentAnimation == animationName)
+        if (animator == null || currentAnimation == animationName)
             return;
 
         currentAnimation = animationName;

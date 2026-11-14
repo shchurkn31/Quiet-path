@@ -66,6 +66,9 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     {
         isDead = true;
 
+        if (GameManager.Instance != null)
+            GameManager.Instance.PlayerDied(transform.position);
+
         if (animator != null)
             animator.SetTrigger(deathAnimation);
 
@@ -75,26 +78,34 @@ public class PlayerHealth : MonoBehaviour, IDamageable
             rb.simulated = false;
         }
 
-        foreach (Collider2D col in playerColliders)
+        if (playerColliders != null)
         {
-            if (col != null)
-                col.enabled = false;
+            foreach (Collider2D col in playerColliders)
+            {
+                if (col != null)
+                    col.enabled = false;
+            }
         }
 
-        foreach (Behaviour script in scriptsToDisable)
+        if (scriptsToDisable != null)
         {
-            if (script != null)
-                script.enabled = false;
+            foreach (Behaviour script in scriptsToDisable)
+            {
+                if (script != null && script != this)
+                    script.enabled = false;
+            }
         }
 
         onDeath?.Invoke();
 
-        StartCoroutine(DestroyAfterDeath());
+        StartCoroutine(ReturnAfterDeath());
     }
 
-    private IEnumerator DestroyAfterDeath()
+    private IEnumerator ReturnAfterDeath()
     {
         yield return new WaitForSeconds(deathAnimationDuration);
-        Destroy(gameObject);
+
+        if (GameManager.Instance != null)
+            GameManager.Instance.ReturnToCamp();
     }
 }
