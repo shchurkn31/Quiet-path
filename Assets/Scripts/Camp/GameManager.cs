@@ -63,11 +63,7 @@ public class GameManager : MonoBehaviour
         if (Keyboard.current == null)
             return;
 
-        if (Keyboard.current.f1Key.wasPressedThisFrame)
-            ReturnToCamp();
-
-        if (Keyboard.current.f2Key.wasPressedThisFrame)
-            StartHunting();
+        
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -233,12 +229,22 @@ public class GameManager : MonoBehaviour
     }
 
     public void StartHunting()
-    {
-        SceneManager.LoadScene("Hunting");
-    }
+{
+    ScreenFade fade = GetComponent<ScreenFade>();
 
-    public void ReturnToCamp()
-    {
+    if (fade != null)
+        fade.FadeAndLoad("Hunting");
+    else
+        SceneManager.LoadScene("Hunting");
+}
+
+public void ReturnToCamp()
+{
+    ScreenFade fade = GetComponent<ScreenFade>();
+
+    if (fade != null)
+        fade.FadeAndLoad("Camp");
+    else
         SceneManager.LoadScene("Camp");
-    }
+}
 }

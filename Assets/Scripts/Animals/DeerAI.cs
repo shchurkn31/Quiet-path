@@ -400,6 +400,9 @@ public class DeerAI : MonoBehaviour, IDamageable
         isDead = true;
         currentState = DeerState.Dead;
 
+        if (QuestManager.Instance != null)
+    QuestManager.Instance.RegisterKill(QuestAnimalType.Deer);
+
         movementDirection = Vector2.zero;
 
         if (rb != null)
@@ -424,8 +427,10 @@ public class DeerAI : MonoBehaviour, IDamageable
         {
             Debug.LogError("DeerAI: відсутній Animator!", this);
         }
+        
 
         StartCoroutine(DeathRoutine());
+        
     }
 
     private IEnumerator DeathRoutine()

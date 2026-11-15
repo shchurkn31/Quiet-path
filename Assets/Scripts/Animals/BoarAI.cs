@@ -558,9 +558,13 @@ public class BoarAI : MonoBehaviour, IDamageable
     }
 
     private void Die()
-    {
-        currentState = BoarState.Dead;
-        movementDirection = Vector2.zero;
+{
+    currentState = BoarState.Dead;
+
+    if (QuestManager.Instance != null)
+        QuestManager.Instance.RegisterKill(QuestAnimalType.Boar);
+
+    movementDirection = Vector2.zero;
 
         rb.linearVelocity = Vector2.zero;
         rb.simulated = false;

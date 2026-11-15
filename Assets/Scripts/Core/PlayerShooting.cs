@@ -1,3 +1,4 @@
+
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections;
@@ -23,100 +24,100 @@ public class PlayerShooting : MonoBehaviour
     private Animator animator;
     private Camera mainCamera;
     private PlayerController player;
+    private SpriteRenderer spriteRenderer;
+    private PlayerAudio playerAudio;
 
     private float cooldownTimer;
     private bool isShooting;
-    private SpriteRenderer spriteRenderer;
 
-    private void Start()
-{
-    if (GameManager.Instance != null)
-    {
-        maxArrows += GameManager.Instance.purchasedArrows;
-        currentArrows = maxArrows;
-    }
-}
-    void Awake()
+    private void Awake()
     {
         animator = GetComponent<Animator>();
         mainCamera = Camera.main;
         player = GetComponent<PlayerController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
+        playerAudio = GetComponent<PlayerAudio>();
     }
 
-    void OnEnable()
+    private void Start()
+    {
+        if (GameManager.Instance != null)
+        {
+            maxArrows += GameManager.Instance.purchasedArrows;
+            currentArrows = maxArrows;
+        }
+    }
+
+    private void OnEnable()
     {
         ShootAction.Enable();
     }
 
-    void OnDisable()
+    private void OnDisable()
     {
         ShootAction.Disable();
     }
 
-    void Update()
+    private void Update()
     {
         if (cooldownTimer > 0)
-        {
             cooldownTimer -= Time.deltaTime;
-        }
 
         if (ShootAction.WasPressedThisFrame() &&
-    cooldownTimer <= 0 &&
-    !isShooting &&
-    currentArrows > 0)
-{
-    StartCoroutine(Shoot());
-}
+            cooldownTimer <= 0 &&
+            !isShooting &&
+            currentArrows > 0)
+        {
+            StartCoroutine(Shoot());
+        }
+
         if (isShooting && player.IsMoving)
-        
-{
-    animator.ResetTrigger("Shoot");
-    animator.SetBool("IsMoving", true);
-    isShooting = false;
-    StopAllCoroutines();
-}
-    if (ShootAction.WasPressedThisFrame() &&
-        cooldownTimer <= 0 &&
-        !isShooting &&
-        currentArrows > 0)
-{
-    StartCoroutine(Shoot());
-}
-    }
-
-    IEnumerator Shoot()
-{
-    isShooting = true;
-    cooldownTimer = cooldown;
-
-    animator.SetTrigger("Shoot");
-
-    float timer = 0f;
-
-    while (timer < shotDelay)
-    {
-        if (player.IsMoving)
         {
             animator.ResetTrigger("Shoot");
             animator.SetBool("IsMoving", true);
 
             isShooting = false;
-            yield break;
+            StopAllCoroutines();
         }
-
-        timer += Time.deltaTime;
-        yield return null;
     }
 
-    SpawnArrow();
+    private IEnumerator Shoot()
+    {
+        isShooting = true;
+        cooldownTimer = cooldown;
 
-    isShooting = false;
-}
+        animator.SetBool("IsMoving", false);
+        animator.SetTrigger("Shoot");
 
-    void SpawnArrow()
+        float timer = 0f;
+
+        while (timer < shotDelay)
+        {
+            if (player.IsMoving)
+            {
+                animator.ResetTrigger("Shoot");
+                animator.SetBool("IsMoving", true);
+
+                isShooting = false;
+                yield break;
+            }
+
+            timer += Time.deltaTime;
+            yield return null;
+        }
+
+        SpawnArrow();
+
+        isShooting = false;
+        animator.SetBool("IsMoving", false);
+    }
+
+    private void SpawnArrow()
     {
         if (Mouse.current == null || mainCamera == null)
+            return;
+
+        if (arrowSprite == null)
             return;
 
         Vector2 mousePosition = Mouse.current.position.ReadValue();
@@ -130,16 +131,22 @@ public class PlayerShooting : MonoBehaviour
         );
 
         Vector2 direction = (
-            (Vector2)mouseWorldPosition - (Vector2)transform.position
+            (Vector2)mouseWorldPosition -
+            (Vector2)transform.position
         ).normalized;
+
+        if (direction == Vector2.zero)
+            return;
+
         if (direction.x < 0)
-    spriteRenderer.flipX = true;
-else if (direction.x > 0)
-    spriteRenderer.flipX = false;
+            spriteRenderer.flipX = true;
+        else if (direction.x > 0)
+            spriteRenderer.flipX = false;
 
         GameObject arrow = new GameObject("Arrow");
 
-        arrow.transform.position = transform.position +
+        arrow.transform.position =
+            transform.position +
             (Vector3)(direction * spawnDistance) +
             Vector3.up * spawnOffsetY;
 
@@ -152,14 +159,19 @@ else if (direction.x > 0)
         ArrowProjectile projectile = arrow.AddComponent<ArrowProjectile>();
         projectile.Launch(direction, arrowSpeed);
         projectile.SetOwner(this);
-        currentArrows--;
-    }
-    public bool AddArrow()
-{
-    if (currentArrows >= maxArrows)
-        return false;
 
-    currentArrows++;
-    return true;
-} 
+        currentArrows--;
+
+        if (playerAudio != null)
+            playerAudio.PlayBowShot();
+    }
+
+    public bool AddArrow()
+    {
+        if (currentArrows >= maxArrows)
+            return false;
+
+        currentArrows++;
+        return true;
+    }
 }
