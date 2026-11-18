@@ -66,16 +66,30 @@ public class QuestManager : MonoBehaviour
     }
 
     private void Awake()
+{
+    if (Instance != null && Instance != this)
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
+        Destroy(gameObject);
+        return;
     }
+
+    Instance = this;
+
+    if (activeQuest != null &&
+        string.IsNullOrWhiteSpace(activeQuest.questId))
+    {
+        activeQuest = null;
+    }
+
+    if (activeQuest != null &&
+        GetQuestDefinition(activeQuest.questId) == null)
+    {
+        Debug.LogWarning("Активний квест має невідомий ID. Його буде скинуто.");
+        activeQuest = null;
+    }
+
+    DontDestroyOnLoad(gameObject);
+}
 
     private void OnDestroy()
     {
@@ -185,6 +199,16 @@ public class QuestManager : MonoBehaviour
             Debug.Log("Усі квести виконано!");
         }
 
+        OnQuestChanged?.Invoke();
+    }
+
+    public void RestoreHuntProgress(ActiveQuest quest, int kills, bool completed)
+    {
+        if (quest == null || activeQuest != quest)
+            return;
+
+        quest.currentKills = kills;
+        quest.completed = completed;
         OnQuestChanged?.Invoke();
     }
 

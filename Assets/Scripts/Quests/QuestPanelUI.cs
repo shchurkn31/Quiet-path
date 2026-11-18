@@ -13,21 +13,45 @@ public class QuestPanelUI : MonoBehaviour
     [Header("Prefab картки")]
     public QuestItemUI questItemPrefab;
 
+    private QuestManager subscribedManager;
+
     private void OnEnable()
     {
-        if (QuestManager.Instance != null)
-            QuestManager.Instance.OnQuestChanged += RefreshQuests;
-    }
-
-    private void OnDisable()
-    {
-        if (QuestManager.Instance != null)
-            QuestManager.Instance.OnQuestChanged -= RefreshQuests;
+        SubscribeToQuestChanges();
     }
 
     private void Start()
     {
+        SubscribeToQuestChanges();
         RefreshQuests();
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeFromQuestChanges();
+    }
+
+    private void SubscribeToQuestChanges()
+    {
+        if (QuestManager.Instance == null)
+            return;
+
+        if (subscribedManager == QuestManager.Instance)
+            return;
+
+        UnsubscribeFromQuestChanges();
+
+        subscribedManager = QuestManager.Instance;
+        subscribedManager.OnQuestChanged += RefreshQuests;
+    }
+
+    private void UnsubscribeFromQuestChanges()
+    {
+        if (subscribedManager != null)
+        {
+            subscribedManager.OnQuestChanged -= RefreshQuests;
+            subscribedManager = null;
+        }
     }
 
     public void OpenPanel()
@@ -46,8 +70,13 @@ public class QuestPanelUI : MonoBehaviour
 
     public void RefreshQuests()
     {
-        if (QuestManager.Instance == null)
+        QuestManager manager = QuestManager.Instance;
+
+        if (manager == null)
+        {
+            Debug.LogWarning("QuestPanelUI: QuestManager не знайдено!");
             return;
+        }
 
         if (questItemPrefab == null)
         {
@@ -55,10 +84,14 @@ public class QuestPanelUI : MonoBehaviour
             return;
         }
 
+        if (availableQuestsParent == null || activeQuestsParent == null)
+        {
+            Debug.LogError("QuestPanelUI: не призначено контейнери квестів!");
+            return;
+        }
+
         ClearContainer(availableQuestsParent);
         ClearContainer(activeQuestsParent);
-
-        QuestManager manager = QuestManager.Instance;
 
         if (manager.activeQuest != null)
         {
@@ -66,19 +99,28 @@ public class QuestPanelUI : MonoBehaviour
                 manager.GetQuestDefinition(manager.activeQuest.questId);
 
             if (definition == null)
+            {
+                Debug.LogWarning(
+                    "QuestPanelUI: не знайдено визначення активного квесту. " +
+                    "ID: " + manager.activeQuest.questId
+                );
+
                 return;
+            }
 
             QuestItemUI item = Instantiate(
                 questItemPrefab,
                 activeQuestsParent
             );
 
+            string questId = manager.activeQuest.questId;
+
             item.SetupActive(
                 definition,
                 manager.activeQuest,
                 () =>
                 {
-                    manager.ClaimReward(manager.activeQuest.questId);
+                    manager.ClaimReward(questId);
                 }
             );
         }
@@ -87,18 +129,23 @@ public class QuestPanelUI : MonoBehaviour
             QuestDefinition definition = manager.CurrentDefinition;
 
             if (definition == null)
+            {
+                Debug.Log("QuestPanelUI: усі квести виконано.");
                 return;
+            }
 
             QuestItemUI item = Instantiate(
                 questItemPrefab,
                 availableQuestsParent
             );
 
+            string questId = definition.questId;
+
             item.SetupAvailable(
                 definition,
                 () =>
                 {
-                    manager.AcceptQuest(definition.questId);
+                    manager.AcceptQuest(questId);
                 }
             );
         }
@@ -109,9 +156,9 @@ public class QuestPanelUI : MonoBehaviour
         if (container == null)
             return;
 
-        foreach (Transform child in container)
+        for (int i = container.childCount - 1; i >= 0; i--)
         {
-            Destroy(child.gameObject);
+            Destroy(container.GetChild(i).gameObject);
         }
     }
 }

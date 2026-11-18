@@ -30,6 +30,14 @@ public class GameManager : MonoBehaviour
     private Vector3 backpackPosition;
     private float backpackExpiresAt;
     private GameObject spawnedBackpack;
+    private int meatBeforeHunt;
+    private int hideBeforeHunt;
+    private int backpackMeatBeforeHunt;
+    private int backpackHideBeforeHunt;
+    private ActiveQuest questBeforeHunt;
+    private int killsBeforeHunt;
+    private bool questCompletedBeforeHunt;
+    private bool hasHuntSnapshot;
 
     private void Awake()
     {
@@ -68,8 +76,49 @@ public class GameManager : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (scene.name == "Hunting")
-            SpawnBackpack();
+        hasHuntSnapshot = scene.name == "Hunting";
+        if (!hasHuntSnapshot)
+            return;
+
+        meatBeforeHunt = meatCount;
+        hideBeforeHunt = hideCount;
+        backpackMeatBeforeHunt = hasBackpack ? backpackMeat : 0;
+        backpackHideBeforeHunt = hasBackpack ? backpackHide : 0;
+        questBeforeHunt = QuestManager.Instance != null ? QuestManager.Instance.activeQuest : null;
+        killsBeforeHunt = questBeforeHunt?.currentKills ?? 0;
+        questCompletedBeforeHunt = questBeforeHunt?.completed ?? false;
+        SpawnBackpack();
+    }
+
+    public void AbandonHunt()
+    {
+        if (hasHuntSnapshot)
+        {
+            hasHuntSnapshot = false;
+            meatCount = meatBeforeHunt;
+            hideCount = hideBeforeHunt;
+
+            if (!hasBackpack && Time.time < backpackExpiresAt)
+            {
+                backpackMeat = backpackMeatBeforeHunt;
+                backpackHide = backpackHideBeforeHunt;
+                hasBackpack = backpackMeat > 0 || backpackHide > 0;
+            }
+
+            if (QuestManager.Instance != null)
+                QuestManager.Instance.RestoreHuntProgress(questBeforeHunt, killsBeforeHunt, questCompletedBeforeHunt);
+        }
+
+        ReturnToCamp();
+    }
+
+    public static void QuitGame()
+    {
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     private void SpawnBackpack()

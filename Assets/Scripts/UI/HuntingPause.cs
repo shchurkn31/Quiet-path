@@ -1,6 +1,7 @@
 
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class HuntingPause : MonoBehaviour
 {
@@ -10,7 +11,10 @@ public class HuntingPause : MonoBehaviour
     [Header("Налаштування звуку")]
     public AudioSettingsUI audioSettingsUI;
 
+    [SerializeField] private GameObject progressWarning;
+
     private bool isPaused;
+    private bool isLeaving;
 
     private void Start()
     {
@@ -31,6 +35,9 @@ public class HuntingPause : MonoBehaviour
 
     public void TogglePause()
     {
+        if (isLeaving)
+            return;
+
         if (isPaused)
             ResumeGame();
         else
@@ -53,9 +60,40 @@ public class HuntingPause : MonoBehaviour
     {
         isPaused = false;
         Time.timeScale = 1f;
+        HideProgressWarning();
 
         if (pausePanel != null)
             pausePanel.SetActive(false);
+    }
+
+    public void ShowProgressWarning()
+    {
+        progressWarning.SetActive(true);
+    }
+
+    public void HideProgressWarning()
+    {
+        if (progressWarning != null)
+            progressWarning.SetActive(false);
+    }
+
+    public void ReturnToCamp()
+    {
+        if (isLeaving)
+            return;
+
+        isLeaving = true;
+        HideProgressWarning();
+
+        if (GameManager.Instance != null)
+            GameManager.Instance.AbandonHunt();
+        else
+            SceneManager.LoadScene("Camp");
+    }
+
+    public void QuitGame()
+    {
+        GameManager.QuitGame();
     }
 
     private void OnDestroy()

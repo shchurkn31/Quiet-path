@@ -34,6 +34,11 @@ public class CampUI : MonoBehaviour
         GameManager.Instance.StartHunting();
     }
 
+    public void QuitGame()
+    {
+        GameManager.QuitGame();
+    }
+
     public void SellResources()
     {
         GameManager.Instance.SellAllResources();
