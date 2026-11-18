@@ -176,14 +176,13 @@ GameObject:
   - component: {fileID: 102347134}
   - component: {fileID: 102347136}
   - component: {fileID: 102347135}
-  - component: {fileID: 102347137}
   m_Layer: 5
   m_Name: QuestsPanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &102347134
 RectTransform:
   m_ObjectHideFlags: 0
@@ -248,23 +247,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 102347133}
   m_CullTransparentMesh: 1
---- !u!114 &102347137
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 102347133}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: aaee7b02ee720674d8aadaac4ebcbf4d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::QuestPanelUI
-  questsPanel: {fileID: 102347133}
-  availableQuestsParent: {fileID: 837283817}
-  activeQuestsParent: {fileID: 587199629}
-  questItemPrefab: {fileID: 5696589584034954069, guid: 468b57563d3859d4481819513e860c9f,
-    type: 3}
 --- !u!1 &102518423
 GameObject:
   m_ObjectHideFlags: 0
@@ -3086,7 +3068,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 102347137}
+      - m_Target: {fileID: 1420004430}
         m_TargetAssemblyTypeName: QuestPanelUI, Assembly-CSharp
         m_MethodName: OpenPanel
         m_Mode: 1
@@ -3148,6 +3130,7 @@ GameObject:
   - component: {fileID: 1420004427}
   - component: {fileID: 1420004426}
   - component: {fileID: 1420004425}
+  - component: {fileID: 1420004430}
   - component: {fileID: 1420004429}
   m_Layer: 5
   m_Name: Canvas
@@ -3270,6 +3253,23 @@ MonoBehaviour:
   hideText: {fileID: 495975913}
   shopStatusText: {fileID: 1777336064}
   shopPanel: {fileID: 1202280570}
+--- !u!114 &1420004430
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1420004424}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aaee7b02ee720674d8aadaac4ebcbf4d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::QuestPanelUI
+  questsPanel: {fileID: 102347133}
+  availableQuestsParent: {fileID: 837283817}
+  activeQuestsParent: {fileID: 587199629}
+  questItemPrefab: {fileID: 5696589584034954069, guid: 468b57563d3859d4481819513e860c9f,
+    type: 3}
 --- !u!1 &1420496376
 GameObject:
   m_ObjectHideFlags: 0
@@ -3490,7 +3490,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 102347137}
+      - m_Target: {fileID: 1420004430}
         m_TargetAssemblyTypeName: QuestPanelUI, Assembly-CSharp
         m_MethodName: ClosePanel
         m_Mode: 1
@@ -3936,16 +3936,20 @@ MonoBehaviour:
       \u043E\u043B\u0435\u043D\u0456\u0432"
     description: "\u0412\u0431\u0438\u0439 3 \u043E\u043B\u0435\u043D\u0456\u0432"
     targetAnimal: 0
-    requiredKills: 3
-    rewardGold: 15
+    requiredKills: 2
+    rewardGold: 5
   - questId: boar_2
     questName: "\u041F\u043E\u043B\u044E\u0432\u0430\u043D\u043D\u044F \u043D\u0430
       \u043A\u0430\u0431\u0430\u043D\u0456\u0432"
     description: "\u0412\u0431\u0438\u0439 2 \u043A\u0430\u0431\u0430\u043D\u0456\u0432"
     targetAnimal: 1
     requiredKills: 2
-    rewardGold: 12
-  activeQuests: []
+    rewardGold: 7
+  activeQuest:
+    questId: 
+    currentKills: 0
+    completed: 0
+  currentQuestIndex: 0
 --- !u!1 &1547979696
 GameObject:
   m_ObjectHideFlags: 0

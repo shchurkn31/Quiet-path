@@ -14,7 +14,9 @@ public class QuestDefinition
 {
     public string questId;
     public string questName;
-    [TextArea] public string description;
+
+    [TextArea]
+    public string description;
 
     public QuestAnimalType targetAnimal;
 
@@ -34,11 +36,34 @@ public class QuestManager : MonoBehaviour
 {
     public static QuestManager Instance;
 
-    [Header("Доступні квести")]
-    public List<QuestDefinition> questDefinitions = new List<QuestDefinition>();
+    [Header("Послідовність квестів")]
+    public List<QuestDefinition> questDefinitions =
+        new List<QuestDefinition>();
 
-    [Header("Активні квести")]
-    public List<ActiveQuest> activeQuests = new List<ActiveQuest>();
+    [Header("Поточний квест")]
+    public ActiveQuest activeQuest;
+
+    [Header("Прогрес ланцюжка")]
+    public int currentQuestIndex = 0;
+
+    public event Action OnQuestChanged;
+
+    private bool chainCompleted;
+
+    public QuestDefinition CurrentDefinition
+    {
+        get
+        {
+            if (chainCompleted)
+                return null;
+
+            if (currentQuestIndex < 0 ||
+                currentQuestIndex >= questDefinitions.Count)
+                return null;
+
+            return questDefinitions[currentQuestIndex];
+        }
+    }
 
     private void Awake()
     {
@@ -60,74 +85,107 @@ public class QuestManager : MonoBehaviour
 
     public void AcceptQuest(string questId)
     {
-        QuestDefinition definition = GetQuestDefinition(questId);
+        QuestDefinition definition = CurrentDefinition;
 
         if (definition == null)
             return;
 
-        if (IsQuestActive(questId))
+        if (activeQuest != null)
             return;
 
-        activeQuests.Add(new ActiveQuest
+        if (definition.questId != questId)
+            return;
+
+        activeQuest = new ActiveQuest
         {
             questId = questId,
             currentKills = 0,
             completed = false
-        });
+        };
 
         Debug.Log("Прийнято квест: " + definition.questName);
+
+        OnQuestChanged?.Invoke();
     }
 
     public void RegisterKill(QuestAnimalType animalType)
     {
-        foreach (ActiveQuest quest in activeQuests)
+        if (activeQuest == null || activeQuest.completed)
+            return;
+
+        QuestDefinition definition =
+            GetQuestDefinition(activeQuest.questId);
+
+        if (definition == null)
+            return;
+
+        if (definition.targetAnimal != animalType)
+            return;
+
+        activeQuest.currentKills++;
+
+        if (activeQuest.currentKills > definition.requiredKills)
+            activeQuest.currentKills = definition.requiredKills;
+
+        Debug.Log(
+            definition.questName + ": " +
+            activeQuest.currentKills + "/" +
+            definition.requiredKills
+        );
+
+        if (activeQuest.currentKills >= definition.requiredKills)
         {
-            if (quest.completed)
-                continue;
+            activeQuest.completed = true;
 
-            QuestDefinition definition = GetQuestDefinition(quest.questId);
-
-            if (definition == null)
-                continue;
-
-            if (definition.targetAnimal != animalType)
-                continue;
-
-            quest.currentKills++;
-
-            Debug.Log(
-                definition.questName + ": " +
-                quest.currentKills + "/" + definition.requiredKills
-            );
-
-            if (quest.currentKills >= definition.requiredKills)
-            {
-                quest.completed = true;
-                Debug.Log("Квест виконано: " + definition.questName);
-            }
+            Debug.Log("Квест виконано: " + definition.questName);
         }
+
+        OnQuestChanged?.Invoke();
     }
 
     public void ClaimReward(string questId)
     {
-        ActiveQuest activeQuest = activeQuests.Find(
-            quest => quest.questId == questId
-        );
-
-        if (activeQuest == null || !activeQuest.completed)
+        if (activeQuest == null)
             return;
 
-        QuestDefinition definition = GetQuestDefinition(questId);
+        if (!activeQuest.completed)
+            return;
+
+        if (activeQuest.questId != questId)
+            return;
+
+        QuestDefinition definition =
+            GetQuestDefinition(questId);
 
         if (definition == null)
             return;
 
         if (GameManager.Instance != null)
+        {
             GameManager.Instance.AddGold(definition.rewardGold);
+        }
+        else
+        {
+            Debug.LogError("GameManager не знайдено!");
+            return;
+        }
 
-        Debug.Log("Отримано нагороду: " + definition.rewardGold + " золота");
+        Debug.Log(
+            "Отримано нагороду: " +
+            definition.rewardGold + " золота"
+        );
 
-        activeQuests.Remove(activeQuest);
+        activeQuest = null;
+
+        currentQuestIndex++;
+
+        if (currentQuestIndex >= questDefinitions.Count)
+        {
+            chainCompleted = true;
+            Debug.Log("Усі квести виконано!");
+        }
+
+        OnQuestChanged?.Invoke();
     }
 
     public QuestDefinition GetQuestDefinition(string questId)
@@ -139,8 +197,7 @@ public class QuestManager : MonoBehaviour
 
     public bool IsQuestActive(string questId)
     {
-        return activeQuests.Exists(
-            quest => quest.questId == questId
-        );
+        return activeQuest != null &&
+               activeQuest.questId == questId;
     }
 }

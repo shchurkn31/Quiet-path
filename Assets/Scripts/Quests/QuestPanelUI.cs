@@ -1,6 +1,5 @@
 
 using UnityEngine;
-using UnityEngine.UI;
 
 public class QuestPanelUI : MonoBehaviour
 {
@@ -14,23 +13,35 @@ public class QuestPanelUI : MonoBehaviour
     [Header("Prefab картки")]
     public QuestItemUI questItemPrefab;
 
+    private void OnEnable()
+    {
+        if (QuestManager.Instance != null)
+            QuestManager.Instance.OnQuestChanged += RefreshQuests;
+    }
+
+    private void OnDisable()
+    {
+        if (QuestManager.Instance != null)
+            QuestManager.Instance.OnQuestChanged -= RefreshQuests;
+    }
+
     private void Start()
     {
-        if (questsPanel == null)
-            questsPanel = gameObject;
-
-        questsPanel.SetActive(false);
+        RefreshQuests();
     }
 
     public void OpenPanel()
     {
-        questsPanel.SetActive(true);
+        if (questsPanel != null)
+            questsPanel.SetActive(true);
+
         RefreshQuests();
     }
 
     public void ClosePanel()
     {
-        questsPanel.SetActive(false);
+        if (questsPanel != null)
+            questsPanel.SetActive(false);
     }
 
     public void RefreshQuests()
@@ -38,13 +49,45 @@ public class QuestPanelUI : MonoBehaviour
         if (QuestManager.Instance == null)
             return;
 
+        if (questItemPrefab == null)
+        {
+            Debug.LogError("QuestPanelUI: не призначено Quest Item Prefab!");
+            return;
+        }
+
         ClearContainer(availableQuestsParent);
         ClearContainer(activeQuestsParent);
 
-        foreach (QuestDefinition definition in QuestManager.Instance.questDefinitions)
+        QuestManager manager = QuestManager.Instance;
+
+        if (manager.activeQuest != null)
         {
-            if (QuestManager.Instance.IsQuestActive(definition.questId))
-                continue;
+            QuestDefinition definition =
+                manager.GetQuestDefinition(manager.activeQuest.questId);
+
+            if (definition == null)
+                return;
+
+            QuestItemUI item = Instantiate(
+                questItemPrefab,
+                activeQuestsParent
+            );
+
+            item.SetupActive(
+                definition,
+                manager.activeQuest,
+                () =>
+                {
+                    manager.ClaimReward(manager.activeQuest.questId);
+                }
+            );
+        }
+        else
+        {
+            QuestDefinition definition = manager.CurrentDefinition;
+
+            if (definition == null)
+                return;
 
             QuestItemUI item = Instantiate(
                 questItemPrefab,
@@ -55,32 +98,7 @@ public class QuestPanelUI : MonoBehaviour
                 definition,
                 () =>
                 {
-                    QuestManager.Instance.AcceptQuest(definition.questId);
-                    RefreshQuests();
-                }
-            );
-        }
-
-        foreach (ActiveQuest activeQuest in QuestManager.Instance.activeQuests)
-        {
-            QuestDefinition definition =
-                QuestManager.Instance.GetQuestDefinition(activeQuest.questId);
-
-            if (definition == null)
-                continue;
-
-            QuestItemUI item = Instantiate(
-                questItemPrefab,
-                activeQuestsParent
-            );
-
-            item.SetupActive(
-                definition,
-                activeQuest,
-                () =>
-                {
-                    QuestManager.Instance.ClaimReward(activeQuest.questId);
-                    RefreshQuests();
+                    manager.AcceptQuest(definition.questId);
                 }
             );
         }
