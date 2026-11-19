@@ -2,6 +2,9 @@
 using UnityEngine;
 using System.Collections;
 
+[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Collider2D))]
+[RequireComponent(typeof(GridPathfinder2D))]
 public class DeerAI : MonoBehaviour, IDamageable
 {
     public enum DeerState
@@ -30,11 +33,9 @@ public class DeerAI : MonoBehaviour, IDamageable
     public float alertSpeed = 1.8f;
     public float fleeSpeed = 4f;
 
-    [Header("Обхід перешкод")]
-    public LayerMask obstacleLayer;
-    public float obstacleCheckDistance = 0.8f;
-    public float obstacleCheckRadius = 0.35f;
-    public float avoidanceStrength = 2f;
+    [Header("Маршрутизація")]
+    public GridPathfinder2D pathfinder;
+    public float fleePathDistance = 8f;
 
     [Header("Територія")]
     public float calmRadius = 2f;
@@ -44,6 +45,15 @@ public class DeerAI : MonoBehaviour, IDamageable
     [Header("Смерть")]
     public float deathDuration = 1f;
 
+    [Header("Випадання предметів")]
+    public GameObject meatPrefab;
+    public GameObject hidePrefab;
+    public float dropSpread = 0.4f;
+    public float lootDropDelay = 1f;
+
+    [Header("Спрайт")]
+    public bool spriteFacesRight = true;
+
     private Rigidbody2D rb;
     private Animator animator;
     private SpriteRenderer spriteRenderer;
@@ -52,26 +62,25 @@ public class DeerAI : MonoBehaviour, IDamageable
     private Vector2 homePosition;
     private Vector2 movementDirection;
     private Vector2 fleeDirection;
+    private Vector2 fleeTarget;
+    private Vector2 roamTarget;
 
     private float decisionTimer;
     private float fleeTimer;
+    private float nextFleeRetry;
+    private int fleeTurnIndex;
+
+    private static readonly float[] FleeTurns = { 0f, 55f, -55f, 100f, -100f };
 
     private bool isDead;
-    private bool facingLeft;
+    private bool hasRoamTarget;
+
+    private string currentAnimation;
 
     private const string AnimIdle = "Deer_Idle";
     private const string AnimWalk = "Deer_Walk";
     private const string AnimRun = "Deer_Run";
     private const string AnimDeath = "Deer_Death";
-
-    [Header("Випадання предметів")]
-    public GameObject meatPrefab;
-    public GameObject hidePrefab;
-    public float dropSpread = 0.4f;
-
-    private string currentAnimation;
-
-    public float lootDropDelay = 1f;
 
     private void Awake()
     {
@@ -79,6 +88,9 @@ public class DeerAI : MonoBehaviour, IDamageable
         animator = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         deerCollider = GetComponent<Collider2D>();
+
+        if (pathfinder == null)
+            pathfinder = GetComponent<GridPathfinder2D>();
 
         currentHealth = maxHealth;
         homePosition = transform.position;
@@ -88,11 +100,14 @@ public class DeerAI : MonoBehaviour, IDamageable
     {
         if (player == null)
         {
-            GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
+            GameObject playerObject =
+                GameObject.FindGameObjectWithTag("Player");
 
             if (playerObject != null)
                 player = playerObject.transform;
         }
+
+        PlayAnimation(AnimIdle);
     }
 
     private void Update()
@@ -113,12 +128,20 @@ public class DeerAI : MonoBehaviour, IDamageable
         {
             currentState = DeerState.Alert;
             decisionTimer = 0f;
+            hasRoamTarget = false;
+
+            if (pathfinder != null)
+                pathfinder.ClearPath();
         }
         else if (currentState == DeerState.Alert &&
                  distanceToPlayer > alertDistance * 1.5f)
         {
             currentState = DeerState.Calm;
             decisionTimer = 0f;
+            hasRoamTarget = false;
+
+            if (pathfinder != null)
+                pathfinder.ClearPath();
         }
 
         switch (currentState)
@@ -149,106 +172,14 @@ public class DeerAI : MonoBehaviour, IDamageable
         else if (currentState == DeerState.Flee)
             speed = fleeSpeed;
 
-        if (movementDirection.sqrMagnitude < 0.01f)
+        if (movementDirection.sqrMagnitude <= 0.000001f)
             return;
 
-        Vector2 actualDirection =
-            GetAvoidanceDirection(movementDirection.normalized);
+        Vector2 step = Vector2.ClampMagnitude(movementDirection, speed * Time.fixedDeltaTime);
+        rb.MovePosition(rb.position + step);
 
-        if (actualDirection.sqrMagnitude > 0.01f)
-        {
-            rb.MovePosition(
-                rb.position + actualDirection * speed * Time.fixedDeltaTime
-            );
-
-            FaceDirection(actualDirection);
-        }
-    }
-
-    private Vector2 GetAvoidanceDirection(Vector2 direction)
-    {
-        if (obstacleLayer.value == 0)
-            return direction;
-
-        if (!HasObstacle(direction))
-            return direction;
-
-        Vector2 leftDirection =
-            Quaternion.Euler(0f, 0f, 45f) * direction;
-
-        Vector2 rightDirection =
-            Quaternion.Euler(0f, 0f, -45f) * direction;
-
-        bool leftBlocked = HasObstacle(leftDirection);
-        bool rightBlocked = HasObstacle(rightDirection);
-
-        if (!leftBlocked && rightBlocked)
-        {
-            return (direction + leftDirection * avoidanceStrength).normalized;
-        }
-
-        if (!rightBlocked && leftBlocked)
-        {
-            return (direction + rightDirection * avoidanceStrength).normalized;
-        }
-
-        if (!leftBlocked && !rightBlocked)
-        {
-            Vector2 chosenDirection = leftDirection;
-
-            if (player != null)
-            {
-                Vector2 awayFromPlayer =
-                    (rb.position - (Vector2)player.position).normalized;
-
-                if (Vector2.Dot(rightDirection, awayFromPlayer) >
-                    Vector2.Dot(leftDirection, awayFromPlayer))
-                {
-                    chosenDirection = rightDirection;
-                }
-            }
-
-            return (direction + chosenDirection * avoidanceStrength).normalized;
-        }
-
-        Vector2 leftSide = new Vector2(-direction.y, direction.x);
-        Vector2 rightSide = new Vector2(direction.y, -direction.x);
-
-        bool leftSideBlocked = HasObstacle(leftSide);
-        bool rightSideBlocked = HasObstacle(rightSide);
-
-        if (!leftSideBlocked)
-            return leftSide;
-
-        if (!rightSideBlocked)
-            return rightSide;
-
-        return Vector2.zero;
-    }
-
-    private bool HasObstacle(Vector2 direction)
-    {
-        RaycastHit2D[] hits = Physics2D.CircleCastAll(
-            rb.position,
-            obstacleCheckRadius,
-            direction,
-            obstacleCheckDistance,
-            obstacleLayer
-        );
-
-        foreach (RaycastHit2D hit in hits)
-        {
-            if (hit.collider == null)
-                continue;
-
-            if (hit.collider.transform == transform ||
-                hit.collider.transform.IsChildOf(transform))
-                continue;
-
-            return true;
-        }
-
-        return false;
+        movementDirection -= step;
+        FaceDirection(step);
     }
 
     private void UpdateRoaming(float radius)
@@ -257,36 +188,73 @@ public class DeerAI : MonoBehaviour, IDamageable
 
         if (decisionTimer <= 0f)
         {
-            decisionTimer = decisionInterval + Random.Range(0f, 2f);
+            decisionTimer =
+                decisionInterval + Random.Range(0f, 2f);
 
             if (Random.value < 0.4f)
             {
+                hasRoamTarget = false;
                 movementDirection = Vector2.zero;
+
+                if (pathfinder != null)
+                    pathfinder.ClearPath();
             }
             else
             {
-                Vector2 target = homePosition +
-                    Random.insideUnitCircle * radius;
+                roamTarget =
+                    homePosition + Random.insideUnitCircle * radius;
 
-                movementDirection =
-                    (target - rb.position).normalized;
+                hasRoamTarget = true;
+
+                if (pathfinder != null)
+                    pathfinder.ClearPath();
             }
         }
 
-        string action = movementDirection.sqrMagnitude < 0.01f
-            ? AnimIdle
-            : AnimWalk;
+        if (!hasRoamTarget)
+        {
+            movementDirection = Vector2.zero;
+            PlayAnimation(AnimIdle);
+            return;
+        }
 
-        PlayMovementAnimation(movementDirection, action);
+        Vector2 toTarget = roamTarget - rb.position;
+
+        if (toTarget.magnitude <= 0.25f)
+        {
+            hasRoamTarget = false;
+            movementDirection = Vector2.zero;
+
+            if (pathfinder != null)
+                pathfinder.ClearPath();
+
+            PlayAnimation(AnimIdle);
+            return;
+        }
+
+        if (pathfinder != null)
+        {
+            movementDirection =
+                pathfinder.GetMovementToTarget(roamTarget);
+        }
+        else
+        {
+            movementDirection = toTarget;
+        }
+
+        if (movementDirection.sqrMagnitude < 0.01f)
+        {
+            PlayAnimation(AnimIdle);
+        }
+        else
+        {
+            PlayMovementAnimation(movementDirection, AnimWalk);
+        }
     }
 
     private void UpdateFlee()
     {
         fleeTimer -= Time.deltaTime;
-
-        movementDirection = fleeDirection;
-
-        PlayMovementAnimation(movementDirection, AnimRun);
 
         if (fleeTimer <= 0f)
         {
@@ -296,10 +264,7 @@ public class DeerAI : MonoBehaviour, IDamageable
 
             if (distanceToPlayer <= fleeDistance)
             {
-                fleeDirection =
-                    ((Vector2)transform.position -
-                     (Vector2)player.position).normalized;
-
+                CalculateFleeTarget();
                 fleeTimer = fleeDuration;
             }
             else if (distanceToPlayer <= alertDistance)
@@ -307,14 +272,45 @@ public class DeerAI : MonoBehaviour, IDamageable
                 currentState = DeerState.Alert;
                 movementDirection = Vector2.zero;
                 decisionTimer = 0f;
+
+                if (pathfinder != null)
+                    pathfinder.ClearPath();
+
+                return;
             }
             else
             {
                 currentState = DeerState.Calm;
                 movementDirection = Vector2.zero;
                 decisionTimer = 0f;
+
+                if (pathfinder != null)
+                    pathfinder.ClearPath();
+
+                return;
             }
         }
+
+        if ((fleeTarget - rb.position).sqrMagnitude <= 0.01f)
+        {
+            fleeTurnIndex = 0;
+            SetFleeTarget();
+        }
+
+        movementDirection = pathfinder != null
+            ? pathfinder.GetMovementToTarget(fleeTarget)
+            : fleeTarget - rb.position;
+
+        if (movementDirection.sqrMagnitude <= 0.000001f && Time.time >= nextFleeRetry)
+        {
+            fleeTurnIndex = (fleeTurnIndex + 1) % FleeTurns.Length;
+            SetFleeTarget();
+        }
+
+        if (movementDirection.sqrMagnitude > 0.01f)
+            PlayMovementAnimation(movementDirection, AnimRun);
+        else
+            PlayAnimation(AnimIdle);
     }
 
     private void StartFlee()
@@ -324,21 +320,43 @@ public class DeerAI : MonoBehaviour, IDamageable
 
         if (currentState != DeerState.Flee)
         {
-            if (player != null)
-            {
-                fleeDirection =
-                    ((Vector2)transform.position -
-                     (Vector2)player.position).normalized;
-            }
-            else
-            {
-                fleeDirection = Vector2.right;
-            }
-
+            CalculateFleeTarget();
             fleeTimer = fleeDuration;
         }
 
         currentState = DeerState.Flee;
+    }
+
+    private void CalculateFleeTarget()
+    {
+        if (player != null)
+        {
+            fleeDirection =
+                ((Vector2)transform.position -
+                 (Vector2)player.position).normalized;
+        }
+        else
+        {
+            fleeDirection = Vector2.right;
+        }
+
+        if (fleeDirection.sqrMagnitude < 0.01f)
+            fleeDirection = Vector2.right;
+
+        fleeTurnIndex = 0;
+        SetFleeTarget();
+    }
+
+    private void SetFleeTarget()
+    {
+        Vector2 offset = Quaternion.Euler(0f, 0f, FleeTurns[fleeTurnIndex]) *
+                         (fleeDirection * fleePathDistance);
+        fleeTarget = rb.position + offset;
+        movementDirection = Vector2.zero;
+        nextFleeRetry = Time.time + 0.5f;
+
+        if (pathfinder != null)
+            pathfinder.ClearPath();
     }
 
     public void ReactToShot(Vector2 shotPosition)
@@ -351,6 +369,9 @@ public class DeerAI : MonoBehaviour, IDamageable
 
         if (fleeDirection.sqrMagnitude < 0.01f)
             fleeDirection = Vector2.right;
+
+        fleeTurnIndex = 0;
+        SetFleeTarget();
 
         currentState = DeerState.Flee;
         fleeTimer = fleeDuration;
@@ -401,9 +422,13 @@ public class DeerAI : MonoBehaviour, IDamageable
         currentState = DeerState.Dead;
 
         if (QuestManager.Instance != null)
-    QuestManager.Instance.RegisterKill(QuestAnimalType.Deer);
+            QuestManager.Instance.RegisterKill(QuestAnimalType.Deer);
 
         movementDirection = Vector2.zero;
+        hasRoamTarget = false;
+
+        if (pathfinder != null)
+            pathfinder.ClearPath();
 
         if (rb != null)
         {
@@ -427,10 +452,8 @@ public class DeerAI : MonoBehaviour, IDamageable
         {
             Debug.LogError("DeerAI: відсутній Animator!", this);
         }
-        
 
         StartCoroutine(DeathRoutine());
-        
     }
 
     private IEnumerator DeathRoutine()
@@ -441,7 +464,8 @@ public class DeerAI : MonoBehaviour, IDamageable
 
         if (animator != null)
         {
-            animationLength = animator.GetCurrentAnimatorStateInfo(0).length;
+            animationLength =
+                animator.GetCurrentAnimatorStateInfo(0).length;
 
             if (animationLength <= 0.01f)
                 animationLength = deathDuration;
@@ -469,8 +493,11 @@ public class DeerAI : MonoBehaviour, IDamageable
     {
         Vector2 dropPosition = transform.position;
 
-        Vector2 meatOffset = Random.insideUnitCircle * dropSpread;
-        Vector2 hideOffset = Random.insideUnitCircle * dropSpread;
+        Vector2 meatOffset =
+            Random.insideUnitCircle * dropSpread;
+
+        Vector2 hideOffset =
+            Random.insideUnitCircle * dropSpread;
 
         if (meatPrefab != null)
         {
@@ -491,30 +518,30 @@ public class DeerAI : MonoBehaviour, IDamageable
         }
     }
 
-    private void PlayMovementAnimation(Vector2 direction, string action)
+    private void PlayMovementAnimation(
+        Vector2 direction,
+        string action)
     {
-        if (direction.sqrMagnitude > 0.01f)
-        {
-            facingLeft = direction.x < 0f;
-
-            if (spriteRenderer != null)
-                spriteRenderer.flipX = facingLeft;
-        }
-
+        FaceDirection(direction);
         PlayAnimation(action);
     }
-    private void FaceDirection(Vector2 direction)
-{
-    if (spriteRenderer == null || Mathf.Abs(direction.x) < 0.01f)
-        return;
 
-    facingLeft = direction.x < 0f;
-    spriteRenderer.flipX = facingLeft;
-}
+    private void FaceDirection(Vector2 direction)
+    {
+        if (spriteRenderer == null ||
+            Mathf.Abs(direction.x) < 0.01f)
+            return;
+
+        bool left = direction.x < 0f;
+
+        spriteRenderer.flipX =
+            spriteFacesRight ? left : !left;
+    }
 
     private void PlayAnimation(string animationName)
     {
-        if (currentAnimation == animationName || animator == null)
+        if (currentAnimation == animationName ||
+            animator == null)
             return;
 
         currentAnimation = animationName;

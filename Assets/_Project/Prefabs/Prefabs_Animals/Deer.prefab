@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5681095539444699635}
   - component: {fileID: 4061732848139282929}
   - component: {fileID: 1563055356841552412}
+  - component: {fileID: 6200847593373317387}
   m_Layer: 12
   m_Name: Deer
   m_TagString: Untagged
@@ -213,12 +214,8 @@ MonoBehaviour:
   calmSpeed: 2
   alertSpeed: 3
   fleeSpeed: 7
-  obstacleLayer:
-    serializedVersion: 2
-    m_Bits: 8192
-  obstacleCheckDistance: 2
-  obstacleCheckRadius: 2
-  avoidanceStrength: 2
+  pathfinder: {fileID: 6200847593373317387}
+  fleePathDistance: 8
   calmRadius: 4
   alertRadius: 5
   decisionInterval: 2
@@ -229,3 +226,24 @@ MonoBehaviour:
     type: 3}
   dropSpread: 1.5
   lootDropDelay: 1.2
+  spriteFacesRight: 1
+--- !u!114 &6200847593373317387
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1638018658670809132}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6658a048d067c184f8a08095ec2ebf22, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::GridPathfinder2D
+  obstacleLayer:
+    serializedVersion: 2
+    m_Bits: 8192
+  cellSize: 0.5
+  obstacleRadius: 0.2
+  searchMargin: 12
+  repathInterval: 0.4
+  waypointDistance: 0.1

@@ -48,6 +48,7 @@ public class AnimalSpawner : MonoBehaviour
     private void Start()
     {
         if (viewCamera == null) viewCamera = Camera.main;
+        if (obstacleMask.value == 0) obstacleMask = LayerMask.GetMask("Obstacles");
 
         if (deerPrefab == null && boarPrefab == null)
         {
